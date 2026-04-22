@@ -1,0 +1,862 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Daily Reflection Tree</title>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,500;1,400&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --night: #0d0f14;
+    --deep: #141720;
+    --surface: #1c2030;
+    --border: rgba(255,255,255,0.07);
+    --gold: #c9a96e;
+    --gold-dim: rgba(201,169,110,0.15);
+    --text: #e8e4dc;
+    --muted: rgba(232,228,220,0.45);
+    --axis1: #7b9cca;
+    --axis2: #9cca7b;
+    --axis3: #ca9c7b;
+    --transition: 0.45s cubic-bezier(0.4,0,0.2,1);
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--night);
+    color: var(--text);
+    font-family: 'DM Sans', sans-serif;
+    font-weight: 300;
+    min-height: 100vh;
+    overflow-x: hidden;
+    position: relative;
+  }
+
+  /* Star field background */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image:
+      radial-gradient(1px 1px at 10% 15%, rgba(255,255,255,0.25) 0%, transparent 100%),
+      radial-gradient(1px 1px at 30% 40%, rgba(255,255,255,0.15) 0%, transparent 100%),
+      radial-gradient(1px 1px at 55% 20%, rgba(255,255,255,0.2) 0%, transparent 100%),
+      radial-gradient(1px 1px at 75% 60%, rgba(255,255,255,0.18) 0%, transparent 100%),
+      radial-gradient(1px 1px at 90% 35%, rgba(255,255,255,0.12) 0%, transparent 100%),
+      radial-gradient(1.5px 1.5px at 20% 75%, rgba(255,255,255,0.1) 0%, transparent 100%),
+      radial-gradient(1px 1px at 65% 85%, rgba(255,255,255,0.15) 0%, transparent 100%),
+      radial-gradient(1px 1px at 45% 55%, rgba(255,255,255,0.1) 0%, transparent 100%);
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  /* Ambient glow */
+  body::after {
+    content: '';
+    position: fixed;
+    top: -30%;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 600px;
+    height: 600px;
+    background: radial-gradient(ellipse, rgba(201,169,110,0.04) 0%, transparent 70%);
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  #app {
+    position: relative;
+    z-index: 1;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-start;
+    padding: 2rem 1rem 4rem;
+  }
+
+  /* Header */
+  .header {
+    text-align: center;
+    padding: 3rem 0 2.5rem;
+    width: 100%;
+    max-width: 640px;
+  }
+
+  .header-moon {
+    font-size: 1.8rem;
+    margin-bottom: 1rem;
+    opacity: 0.8;
+    animation: float 4s ease-in-out infinite;
+  }
+
+  @keyframes float {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-6px); }
+  }
+
+  .header h1 {
+    font-family: 'Playfair Display', serif;
+    font-size: clamp(1.2rem, 3vw, 1.5rem);
+    font-weight: 400;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--gold);
+    opacity: 0.9;
+  }
+
+  /* Axis tracker */
+  .axis-tracker {
+    display: flex;
+    gap: 0.5rem;
+    margin-top: 1.5rem;
+    justify-content: center;
+    flex-wrap: wrap;
+  }
+
+  .axis-pill {
+    font-size: 0.65rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    padding: 0.3rem 0.8rem;
+    border-radius: 2rem;
+    border: 1px solid var(--border);
+    color: var(--muted);
+    transition: var(--transition);
+    font-weight: 500;
+  }
+
+  .axis-pill.active-1 { border-color: var(--axis1); color: var(--axis1); background: rgba(123,156,202,0.08); }
+  .axis-pill.active-2 { border-color: var(--axis2); color: var(--axis2); background: rgba(156,202,123,0.08); }
+  .axis-pill.active-3 { border-color: var(--axis3); color: var(--axis3); background: rgba(202,156,123,0.08); }
+  .axis-pill.done { opacity: 0.4; text-decoration: line-through; }
+
+  /* Main card */
+  .card {
+    width: 100%;
+    max-width: 640px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 2.5rem 2.5rem 2rem;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .card::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 2px;
+    background: linear-gradient(90deg, transparent, var(--gold), transparent);
+    opacity: 0.4;
+  }
+
+  /* Node type indicator */
+  .node-type-badge {
+    font-size: 0.6rem;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 1.2rem;
+    font-weight: 500;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  .node-type-badge::before {
+    content: '';
+    display: inline-block;
+    width: 20px;
+    height: 1px;
+    background: var(--gold);
+    opacity: 0.4;
+  }
+
+  /* Node text */
+  .node-text {
+    font-family: 'Playfair Display', serif;
+    font-size: clamp(1.1rem, 2.5vw, 1.3rem);
+    line-height: 1.65;
+    color: var(--text);
+    white-space: pre-line;
+    margin-bottom: 2rem;
+    font-weight: 400;
+  }
+
+  /* Reflection special styling */
+  .node-text.reflection-text {
+    font-style: italic;
+    color: rgba(232,228,220,0.85);
+    border-left: 2px solid var(--gold);
+    padding-left: 1.2rem;
+    opacity: 0.9;
+  }
+
+  /* Options */
+  .options {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    margin-bottom: 1.5rem;
+  }
+
+  .option-btn {
+    background: transparent;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 1rem 1.2rem;
+    color: var(--text);
+    font-family: 'DM Sans', sans-serif;
+    font-size: 0.9rem;
+    font-weight: 300;
+    text-align: left;
+    cursor: pointer;
+    transition: var(--transition);
+    display: flex;
+    align-items: flex-start;
+    gap: 0.8rem;
+    line-height: 1.45;
+  }
+
+  .option-letter {
+    font-size: 0.65rem;
+    letter-spacing: 0.1em;
+    color: var(--gold);
+    opacity: 0.7;
+    margin-top: 0.15rem;
+    flex-shrink: 0;
+    font-weight: 500;
+  }
+
+  .option-btn:hover {
+    border-color: var(--gold);
+    background: var(--gold-dim);
+    transform: translateX(4px);
+  }
+
+  .option-btn.selected {
+    border-color: var(--gold);
+    background: var(--gold-dim);
+  }
+
+  /* Continue / primary button */
+  .continue-btn {
+    background: transparent;
+    border: 1px solid var(--gold);
+    border-radius: 10px;
+    padding: 0.9rem 2rem;
+    color: var(--gold);
+    font-family: 'DM Sans', sans-serif;
+    font-size: 0.85rem;
+    font-weight: 500;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    cursor: pointer;
+    transition: var(--transition);
+    width: 100%;
+    margin-top: 0.5rem;
+  }
+
+  .continue-btn:hover {
+    background: var(--gold-dim);
+  }
+
+  /* Summary card */
+  .summary-section {
+    margin-bottom: 1.5rem;
+  }
+
+  .summary-scores {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 0.75rem;
+    margin: 1.5rem 0;
+  }
+
+  .score-cell {
+    background: var(--deep);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 0.9rem 0.75rem;
+    text-align: center;
+  }
+
+  .score-label {
+    font-size: 0.6rem;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: var(--muted);
+    margin-bottom: 0.4rem;
+    font-weight: 500;
+  }
+
+  .score-value {
+    font-family: 'Playfair Display', serif;
+    font-size: 0.9rem;
+    font-weight: 500;
+  }
+
+  /* Transitions */
+  .fade-in {
+    animation: fadeIn 0.5s ease forwards;
+  }
+
+  @keyframes fadeIn {
+    from { opacity: 0; transform: translateY(12px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  /* Progress bar */
+  .progress-bar {
+    width: 100%;
+    max-width: 640px;
+    height: 2px;
+    background: var(--border);
+    border-radius: 2px;
+    margin-bottom: 1.5rem;
+    overflow: hidden;
+  }
+
+  .progress-fill {
+    height: 100%;
+    background: linear-gradient(90deg, var(--gold), var(--axis3));
+    border-radius: 2px;
+    transition: width 0.6s ease;
+  }
+
+  /* Restart */
+  .restart-btn {
+    background: transparent;
+    border: none;
+    color: var(--muted);
+    font-family: 'DM Sans', sans-serif;
+    font-size: 0.75rem;
+    cursor: pointer;
+    margin-top: 1.5rem;
+    text-decoration: underline;
+    text-underline-offset: 3px;
+    transition: color 0.2s;
+  }
+
+  .restart-btn:hover { color: var(--text); }
+
+  @media (max-width: 480px) {
+    .card { padding: 1.8rem 1.5rem 1.5rem; }
+    .summary-scores { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+<div id="app">
+  <div class="header">
+    <div class="header-moon">🌙</div>
+    <h1>The Daily Reflection Tree</h1>
+    <div class="axis-tracker">
+      <div class="axis-pill" id="pill-1">Axis I · Locus</div>
+      <div class="axis-pill" id="pill-2">Axis II · Orientation</div>
+      <div class="axis-pill" id="pill-3">Axis III · Radius</div>
+    </div>
+  </div>
+
+  <div class="progress-bar">
+    <div class="progress-fill" id="progress" style="width: 0%"></div>
+  </div>
+
+  <div class="card" id="node-card">
+    <!-- rendered dynamically -->
+  </div>
+
+  <button class="restart-btn" id="restart-btn" onclick="restartSession()" style="display:none">↺ Start over</button>
+</div>
+
+<script>
+// ─── TREE DATA ────────────────────────────────────────────────────────────────
+const TREE = {
+  "START": {
+    id:"START", type:"start",
+    text:"Good evening. You made it through the day.\n\nThis isn't a performance review. It's a quiet conversation — just you and what actually happened today. There are no right answers, only honest ones.\n\nLet's begin.",
+    next:"A1_OPEN"
+  },
+  "A1_OPEN": {
+    id:"A1_OPEN", type:"question", axis:1,
+    text:"If today were a weather report, it would be:",
+    options:[
+      {label:"Sunny — things largely went my way", value:"sunny"},
+      {label:"Cloudy — mixed, some friction, some progress", value:"cloudy"},
+      {label:"Stormy — it was hard and things went sideways", value:"stormy"},
+      {label:"Foggy — I'm not sure what even happened today", value:"foggy"}
+    ],
+    next:"A1_D1"
+  },
+  "A1_D1": {
+    id:"A1_D1", type:"decision",
+    routing:[
+      {condition: s => ["sunny","cloudy"].includes(s["A1_OPEN"]), next:"A1_Q_AGENCY_HIGH"},
+      {condition: s => ["stormy","foggy"].includes(s["A1_OPEN"]), next:"A1_Q_AGENCY_LOW"}
+    ]
+  },
+  "A1_Q_AGENCY_HIGH": {
+    id:"A1_Q_AGENCY_HIGH", type:"question", axis:1,
+    text:'A "{A1_OPEN_label}" day. When something went well today, what drove it?',
+    options:[
+      {label:"I had prepared for it and it showed", value:"prepared", signal:"axis1:internal"},
+      {label:"I stayed flexible when the plan changed", value:"flexible", signal:"axis1:internal"},
+      {label:"The right people showed up for me", value:"people", signal:"axis1:external"},
+      {label:"Honestly, things just lined up — I'm not sure why", value:"luck", signal:"axis1:external"}
+    ],
+    next:"A1_D_REFLECT1"
+  },
+  "A1_Q_AGENCY_LOW": {
+    id:"A1_Q_AGENCY_LOW", type:"question", axis:1,
+    text:'A "{A1_OPEN_label}" kind of day. When it got difficult, what was your instinct?',
+    options:[
+      {label:"Find the one thing I could still influence", value:"find_control", signal:"axis1:internal"},
+      {label:"Wait it out — sometimes you just have to", value:"wait", signal:"axis1:external"},
+      {label:"Feel frustrated that others weren't handling their part", value:"frustrated_others", signal:"axis1:external"},
+      {label:"Push through alone even when it wasn't working", value:"push", signal:"axis1:internal"}
+    ],
+    next:"A1_D_REFLECT1"
+  },
+  "A1_D_REFLECT1": {
+    id:"A1_D_REFLECT1", type:"decision",
+    routing:[
+      {condition: s => s._lastSignal === "axis1:internal", next:"A1_R_INT"},
+      {condition: s => s._lastSignal === "axis1:external", next:"A1_R_EXT"},
+      {condition: () => true, next:"A1_R_MID"}
+    ]
+  },
+  "A1_R_INT": {
+    id:"A1_R_INT", type:"reflection", axis:1, signal:"axis1:internal",
+    text:"You see your hand in today. Not as blame — as authorship.\n\nThat's the internal locus at work: the belief that your choices shape what happens, even on days that push back. It doesn't mean you controlled everything. It means you stayed in relationship with what you could control.\n\nThat's a quiet kind of strength.",
+    next:"A1_Q2_FOLLOWUP"
+  },
+  "A1_R_EXT": {
+    id:"A1_R_EXT", type:"reflection", axis:1, signal:"axis1:external",
+    text:"Hard days pull attention outward — to what went wrong, who didn't deliver, what the system failed to provide. That's a natural response.\n\nBut here's a question worth sitting with: somewhere in today, however small, you made a call. A choice. Even the choice to keep going was yours.\n\nWhat was it?",
+    next:"A1_Q2_FOLLOWUP"
+  },
+  "A1_R_MID": {
+    id:"A1_R_MID", type:"reflection", axis:1,
+    text:"You're holding both — the things you shaped and the things that shaped you. That's honest.\n\nMost days are a negotiation between agency and circumstance. The question isn't whether you had full control — no one does. It's whether you stayed engaged with the parts you could influence.",
+    next:"A1_Q2_FOLLOWUP"
+  },
+  "A1_Q2_FOLLOWUP": {
+    id:"A1_Q2_FOLLOWUP", type:"question", axis:1,
+    text:"If today repeated tomorrow, what's one thing you would do differently — within your own control?",
+    options:[
+      {label:"Prepare differently or earlier", value:"prepare", signal:"axis1:internal"},
+      {label:"Manage my reaction when things shifted", value:"manage_reaction", signal:"axis1:internal"},
+      {label:"Communicate something I left unsaid", value:"communicate", signal:"axis1:internal"},
+      {label:"Honestly, I'm not sure anything would change", value:"not_sure", signal:"axis1:external"}
+    ],
+    next:"BRIDGE_1_2"
+  },
+  "BRIDGE_1_2": {
+    id:"BRIDGE_1_2", type:"bridge",
+    text:"You've looked at how you moved through today.\n\nNow let's look at what you gave — and what you were tracking.",
+    next:"A2_OPEN"
+  },
+  "A2_OPEN": {
+    id:"A2_OPEN", type:"question", axis:2,
+    text:"Think of your most significant interaction today. How would you honestly describe your energy going into it?",
+    options:[
+      {label:"I wanted to help it go well for the other person", value:"help_other"},
+      {label:"I wanted to do my part and be recognized for it", value:"be_recognized"},
+      {label:"I wanted to get it done and move on", value:"get_done"},
+      {label:"I was tracking whether I was getting what I needed from it", value:"get_from_it"}
+    ],
+    next:"A2_D1"
+  },
+  "A2_D1": {
+    id:"A2_D1", type:"decision",
+    routing:[
+      {condition: s => s["A2_OPEN"] === "help_other", next:"A2_Q_CONTRIB_HIGH"},
+      {condition: s => ["be_recognized","get_from_it"].includes(s["A2_OPEN"]), next:"A2_Q_ENTITLE_HIGH"},
+      {condition: s => s["A2_OPEN"] === "get_done", next:"A2_Q_CONTRIB_MID"}
+    ]
+  },
+  "A2_Q_CONTRIB_HIGH": {
+    id:"A2_Q_CONTRIB_HIGH", type:"question", axis:2,
+    text:"Did you do something today that wasn't technically your responsibility — something you did anyway because it needed doing?",
+    options:[
+      {label:"Yes — I picked up something that fell through the cracks", value:"picked_up", signal:"axis2:contribution"},
+      {label:"Yes — I helped a colleague who was struggling", value:"helped_colleague", signal:"axis2:contribution"},
+      {label:"Not really — I stayed in my lane", value:"my_lane", signal:"axis2:entitlement"},
+      {label:"I thought about it but didn't act on it", value:"thought_not_acted", signal:"axis2:entitlement"}
+    ],
+    next:"A2_D_REFLECT2"
+  },
+  "A2_Q_CONTRIB_MID": {
+    id:"A2_Q_CONTRIB_MID", type:"question", axis:2,
+    text:"\"Getting it done\" is real work. But think about the texture of how you did it — what were you more aware of?",
+    options:[
+      {label:"Whether the output would actually be useful to whoever needs it", value:"useful_to_other", signal:"axis2:contribution"},
+      {label:"Whether I'd be credited for completing it", value:"credited", signal:"axis2:entitlement"},
+      {label:"Just clearing it off my list", value:"clear_list", signal:"axis2:entitlement"},
+      {label:"Both — doing good work and having that recognized", value:"both", signal:"axis2:contribution"}
+    ],
+    next:"A2_D_REFLECT2"
+  },
+  "A2_Q_ENTITLE_HIGH": {
+    id:"A2_Q_ENTITLE_HIGH", type:"question", axis:2,
+    text:"That's honest. Now: did you feel you got what you were tracking — the recognition, the return?",
+    options:[
+      {label:"Yes — it was acknowledged and it felt fair", value:"got_it_fair", signal:"axis2:contribution"},
+      {label:"Partly — some recognition, but less than I deserved", value:"partly", signal:"axis2:entitlement"},
+      {label:"No — and I'm still carrying that frustration", value:"no_frustrated", signal:"axis2:entitlement"},
+      {label:"I stopped tracking it halfway through and just focused on the work", value:"stopped_tracking", signal:"axis2:contribution"}
+    ],
+    next:"A2_D_REFLECT2"
+  },
+  "A2_D_REFLECT2": {
+    id:"A2_D_REFLECT2", type:"decision",
+    routing:[
+      {condition: s => s._lastSignal === "axis2:contribution", next:"A2_R_CONTRIB"},
+      {condition: s => s._lastSignal === "axis2:entitlement", next:"A2_R_ENTITLE"},
+      {condition: () => true, next:"A2_R_MID"}
+    ]
+  },
+  "A2_R_CONTRIB": {
+    id:"A2_R_CONTRIB", type:"reflection", axis:2, signal:"axis2:contribution",
+    text:"What you gave today — without waiting to be asked, without tracking whether it came back — that's organizational citizenship. It's invisible on a spreadsheet, but it's what makes teams work.\n\nPeople remember who showed up. Not the job title. Not the deliverable. The person.",
+    next:"A2_Q2"
+  },
+  "A2_R_ENTITLE": {
+    id:"A2_R_ENTITLE", type:"reflection", axis:2, signal:"axis2:entitlement",
+    text:"It's not wrong to want recognition. We all do.\n\nBut there's a difference between wanting your work seen — which is healthy — and keeping a ledger of what's owed, which is exhausting.\n\nThe frustration you're carrying right now: is it about the work, or about the accounting?",
+    next:"A2_Q2"
+  },
+  "A2_R_MID": {
+    id:"A2_R_MID", type:"reflection", axis:2,
+    text:"Most of us live somewhere in the middle — genuinely caring about the work and the people, while also wanting our effort acknowledged. That's human.\n\nThe question isn't whether you want recognition. It's whether the wanting shapes your choices about what to give.",
+    next:"A2_Q2"
+  },
+  "A2_Q2": {
+    id:"A2_Q2", type:"question", axis:2,
+    text:"If a colleague had to describe the quality of your presence today — not your output, but your presence — what do you think they'd say?",
+    options:[
+      {label:"They'd say I showed up fully and made things better", value:"showed_up", signal:"axis2:contribution"},
+      {label:"They'd say I was competent but a bit distant", value:"competent_distant", signal:"axis2:entitlement"},
+      {label:"They'd say I seemed stressed or preoccupied with my own stuff", value:"preoccupied", signal:"axis2:entitlement"},
+      {label:"They'd say I was hard to read today", value:"hard_to_read", signal:"axis2:entitlement"}
+    ],
+    next:"BRIDGE_2_3"
+  },
+  "BRIDGE_2_3": {
+    id:"BRIDGE_2_3", type:"bridge",
+    text:"You've looked at your agency. You've looked at what you gave.\n\nNow, let's look at your frame — how wide was your lens today?",
+    next:"A3_OPEN"
+  },
+  "A3_OPEN": {
+    id:"A3_OPEN", type:"question", axis:3,
+    text:"When you think about today's biggest challenge or source of stress, who was it mostly about?",
+    options:[
+      {label:"Me — my workload, my stress, my deadline", value:"just_me"},
+      {label:"My team — we were in it together", value:"my_team"},
+      {label:"A specific colleague who seemed to have it harder than me", value:"colleague"},
+      {label:"The people we're ultimately building this for — customers, users, community", value:"end_users"}
+    ],
+    next:"A3_D1"
+  },
+  "A3_D1": {
+    id:"A3_D1", type:"decision",
+    routing:[
+      {condition: s => s["A3_OPEN"] === "just_me", next:"A3_Q_SELF"},
+      {condition: s => s["A3_OPEN"] === "my_team", next:"A3_Q_TEAM"},
+      {condition: s => ["colleague","end_users"].includes(s["A3_OPEN"]), next:"A3_Q_ALTRO"}
+    ]
+  },
+  "A3_Q_SELF": {
+    id:"A3_Q_SELF", type:"question", axis:3,
+    text:"That's fair — sometimes the challenge genuinely is yours alone. When you were in the middle of it, was there a moment where you thought about how it might be affecting anyone else?",
+    options:[
+      {label:"Yes — I noticed the ripple effects on my team", value:"noticed_team", signal:"axis3:altrocentric"},
+      {label:"Briefly — but I was too in it to hold that thought", value:"briefly", signal:"axis3:selfcentric"},
+      {label:"Honestly, no — I was focused on getting through it", value:"no", signal:"axis3:selfcentric"},
+      {label:"I thought about it only after the moment passed", value:"after", signal:"axis3:selfcentric"}
+    ],
+    next:"A3_D_REFLECT3"
+  },
+  "A3_Q_TEAM": {
+    id:"A3_Q_TEAM", type:"question", axis:3,
+    text:"You were thinking about the team. In that awareness — did it change how you acted?",
+    options:[
+      {label:"Yes — I took on something extra to reduce pressure on others", value:"took_extra", signal:"axis3:altrocentric"},
+      {label:"Yes — I checked in with someone who seemed overwhelmed", value:"checked_in", signal:"axis3:altrocentric"},
+      {label:"I was aware, but didn't change much about what I did", value:"aware_not_changed", signal:"axis3:selfcentric"},
+      {label:"The team stress added to my own — it made things harder", value:"added_stress", signal:"axis3:selfcentric"}
+    ],
+    next:"A3_D_REFLECT3"
+  },
+  "A3_Q_ALTRO": {
+    id:"A3_Q_ALTRO", type:"question", axis:3,
+    text:"You were holding someone else's experience in mind today. What did you do with that awareness?",
+    options:[
+      {label:"I acted on it — said something, did something, made space", value:"acted", signal:"axis3:altrocentric"},
+      {label:"I felt it but wasn't sure how to help", value:"felt_unsure", signal:"axis3:altrocentric"},
+      {label:"I acknowledged it internally but didn't reach out", value:"internal_only", signal:"axis3:altrocentric"},
+      {label:"It stayed in the background — I had my own things to handle", value:"background", signal:"axis3:selfcentric"}
+    ],
+    next:"A3_D_REFLECT3"
+  },
+  "A3_D_REFLECT3": {
+    id:"A3_D_REFLECT3", type:"decision",
+    routing:[
+      {condition: s => s._lastSignal === "axis3:altrocentric", next:"A3_R_TRANSCEND"},
+      {condition: s => s._lastSignal === "axis3:selfcentric" && s["A3_OPEN"] === "just_me", next:"A3_R_SELF"},
+      {condition: () => true, next:"A3_R_MID"}
+    ]
+  },
+  "A3_R_TRANSCEND": {
+    id:"A3_R_TRANSCEND", type:"reflection", axis:3, signal:"axis3:altrocentric",
+    text:"You held more than yourself today.\n\nMaslow spent most of his career mapping what people need. In his final work, he noticed something: the people who suffered least weren't the ones whose needs were fully met. They were the ones oriented toward something beyond their own needs.\n\nYou did that. Even in the middle of your own pressure.",
+    next:"A3_Q2"
+  },
+  "A3_R_SELF": {
+    id:"A3_R_SELF", type:"reflection", axis:3, signal:"axis3:selfcentric",
+    text:"When the pressure is high enough, the frame narrows. That's not a character flaw — it's how attention works under stress.\n\nBut here's something worth noticing: most of the pain we carry from difficult days isn't about the work. It's about feeling like we were in it alone. The antidote — strangely — is to widen the lens. Look at who else was in it.",
+    next:"A3_Q2"
+  },
+  "A3_R_MID": {
+    id:"A3_R_MID", type:"reflection", axis:3,
+    text:"You're aware that others exist in your day — you just weren't always sure what to do with that awareness. That's further than most people get.\n\nAwareness without action is still valuable. It keeps the door open. Tomorrow, that awareness might be two seconds earlier — just enough to say something.",
+    next:"A3_Q2"
+  },
+  "A3_Q2": {
+    id:"A3_Q2", type:"question", axis:3,
+    text:"One last question: if today added up to something — beyond the tasks completed — what would that something be?",
+    options:[
+      {label:"I made things a little easier for at least one person", value:"made_easier", signal:"axis3:altrocentric"},
+      {label:"I moved something forward that matters beyond just me", value:"moved_forward", signal:"axis3:altrocentric"},
+      {label:"Honestly, today felt like maintenance — nothing larger", value:"maintenance", signal:"axis3:selfcentric"},
+      {label:"I'm not sure — I'd need to think about that", value:"not_sure", signal:"axis3:selfcentric"}
+    ],
+    next:"SUMMARY_D"
+  },
+  "SUMMARY_D": {
+    id:"SUMMARY_D", type:"decision",
+    routing:[
+      {condition: s => s._axis1dom === "internal" && s._axis2dom === "contribution" && s._axis3dom === "altrocentric", next:"SUMMARY_VCA"},
+      {condition: s => s._axis1dom === "external" && s._axis2dom === "entitlement" && s._axis3dom === "selfcentric", next:"SUMMARY_EES"},
+      {condition: s => s._axis1dom === "internal" && s._axis2dom === "entitlement", next:"SUMMARY_ICM"},
+      {condition: () => true, next:"SUMMARY_DEFAULT"}
+    ]
+  },
+  "SUMMARY_VCA": {
+    id:"SUMMARY_VCA", type:"summary",
+    text:'Today\'s reflection:\n\nYou showed up with agency — you saw your hand in what happened, on a "{A1_OPEN_label}" kind of day.\n\nYou gave more than you counted. The contribution lens was active.\n\nAnd you held more than yourself — your frame extended beyond your own experience to include others.\n\nThat\'s a full day. Not a perfect one — full. See you tomorrow.',
+    next:"END"
+  },
+  "SUMMARY_EES": {
+    id:"SUMMARY_EES", type:"summary",
+    text:'Today\'s reflection:\n\nIt was a "{A1_OPEN_label}" day, and the weight of it showed in how you moved through it — more reactive than authoring, more tracking than giving, more inward than outward.\n\nThat\'s not a verdict. That\'s a snapshot.\n\nThe person who answered these questions honestly is already doing something most people don\'t. You named it. Tomorrow, you can do one thing differently.\n\nSee you then.',
+    next:"END"
+  },
+  "SUMMARY_ICM": {
+    id:"SUMMARY_ICM", type:"summary",
+    text:'Today\'s reflection:\n\nYou stayed in your agency — you owned the day, shaped it where you could on what was a "{A1_OPEN_label}" day.\n\nBut the giving side was quieter. You were executing, not contributing in the fullest sense. Those aren\'t the same thing.\n\nThe question for tomorrow: where could your effort land on someone else\'s problem, not just your own output?\n\nSee you tomorrow.',
+    next:"END"
+  },
+  "SUMMARY_DEFAULT": {
+    id:"SUMMARY_DEFAULT", type:"summary",
+    text:'Today\'s reflection:\n\nA "{A1_OPEN_label}" day. You moved through all three lenses — how you held agency, what you gave, and how wide your view was.\n\nThe answers weren\'t all in the same direction. That\'s honest. Most days aren\'t clean.\n\nWhat stays with you from tonight? Not the score — the moment. That\'s the one worth taking into tomorrow.',
+    next:"END"
+  },
+  "END": {
+    id:"END", type:"end",
+    text:"Rest well.\n\nThe fact that you reflected means tomorrow has a better starting point than today did.",
+    next:null
+  }
+};
+
+// ─── STATE ────────────────────────────────────────────────────────────────────
+let state = {};
+let currentNodeId = "START";
+const TOTAL_STEPS = 18; // approximate for progress bar
+let stepCount = 0;
+
+const optionLabels = { 0:"A",1:"B",2:"C",3:"D" };
+
+function initState() {
+  state = {
+    axis1: { internal: 0, external: 0 },
+    axis2: { contribution: 0, entitlement: 0 },
+    axis3: { altrocentric: 0, selfcentric: 0 },
+    _lastSignal: null,
+    _axis1dom: null,
+    _axis2dom: null,
+    _axis3dom: null
+  };
+}
+
+function recordSignal(signal) {
+  if (!signal) return;
+  state._lastSignal = signal;
+  const [axis, pole] = signal.split(":");
+  if (axis === "axis1") state.axis1[pole]++;
+  if (axis === "axis2") state.axis2[pole]++;
+  if (axis === "axis3") state.axis3[pole]++;
+  // Update dominants
+  state._axis1dom = state.axis1.internal >= state.axis1.external ? "internal" : "external";
+  state._axis2dom = state.axis2.contribution >= state.axis2.entitlement ? "contribution" : "entitlement";
+  state._axis3dom = state.axis3.altrocentric >= state.axis3.selfcentric ? "altrocentric" : "selfcentric";
+}
+
+function interpolate(text) {
+  if (!text) return text;
+  const weatherLabels = { sunny:"sunny", cloudy:"cloudy", stormy:"stormy", foggy:"foggy" };
+  const label = state["A1_OPEN"] ? weatherLabels[state["A1_OPEN"]] || state["A1_OPEN"] : "";
+  return text.replace(/{A1_OPEN_label}/g, label).replace(/{A1_OPEN\.label}/g, label);
+}
+
+// ─── AXIS TRACKER ─────────────────────────────────────────────────────────────
+function updateAxisTracker(node) {
+  const a = node.axis;
+  [1,2,3].forEach(i => {
+    const pill = document.getElementById(`pill-${i}`);
+    pill.className = "axis-pill";
+    if (i < a) pill.classList.add("done");
+    else if (i === a) pill.classList.add(`active-${i}`);
+  });
+}
+
+// ─── RENDER ───────────────────────────────────────────────────────────────────
+function render(nodeId) {
+  const node = TREE[nodeId];
+  if (!node) return;
+  currentNodeId = nodeId;
+
+  stepCount = Math.min(stepCount + 1, TOTAL_STEPS);
+  document.getElementById("progress").style.width = `${(stepCount / TOTAL_STEPS) * 100}%`;
+
+  const card = document.getElementById("node-card");
+  card.innerHTML = "";
+
+  if (node.axis) updateAxisTracker(node);
+
+  // Determine display type
+  const type = node.type;
+
+  // Badge
+  const badge = document.createElement("div");
+  badge.className = "node-type-badge";
+  const typeLabels = { start:"Evening Check-in", question:"Reflection Question", reflection:"Insight", bridge:"Transition", summary:"Your Reflection", end:"Closing", decision:"" };
+  if (typeLabels[type]) {
+    badge.textContent = typeLabels[type];
+    card.appendChild(badge);
+  }
+
+  // Text
+  if (node.text) {
+    const textEl = document.createElement("div");
+    textEl.className = "node-text" + (type === "reflection" ? " reflection-text" : "");
+    textEl.textContent = interpolate(node.text);
+    card.appendChild(textEl);
+  }
+
+  if (type === "question") {
+    renderQuestion(card, node);
+  } else if (type === "summary") {
+    renderSummary(card, node);
+    document.getElementById("restart-btn").style.display = "block";
+  } else if (type === "end") {
+    document.getElementById("progress").style.width = "100%";
+    document.getElementById("restart-btn").style.display = "block";
+  } else {
+    // start, reflection, bridge, decision — auto-advance or continue btn
+    if (type !== "decision") {
+      if (node.signal) recordSignal(node.signal);
+      const btn = document.createElement("button");
+      btn.className = "continue-btn";
+      btn.textContent = type === "start" ? "Begin →" : type === "bridge" ? "Continue →" : type === "reflection" ? "I see it →" : "Continue →";
+      btn.onclick = () => advance(node.next);
+      card.appendChild(btn);
+    } else {
+      advance(resolveDecision(node));
+      return;
+    }
+  }
+
+  card.classList.remove("fade-in");
+  void card.offsetWidth; // force reflow
+  card.classList.add("fade-in");
+}
+
+function renderQuestion(card, node) {
+  const opts = document.createElement("div");
+  opts.className = "options";
+
+  node.options.forEach((opt, i) => {
+    const btn = document.createElement("button");
+    btn.className = "option-btn";
+    btn.innerHTML = `<span class="option-letter">${optionLabels[i]}</span><span>${opt.label}</span>`;
+    btn.onclick = () => {
+      // Record answer
+      state[node.id] = opt.value;
+      if (opt.signal) recordSignal(opt.signal);
+      advance(node.next);
+    };
+    opts.appendChild(btn);
+  });
+
+  card.appendChild(opts);
+}
+
+function renderSummary(card, node) {
+  const scores = document.createElement("div");
+  scores.className = "summary-scores";
+
+  const axes = [
+    { label:"Locus", dom: state._axis1dom === "internal" ? "Internal ↑" : "External ↑", color:"var(--axis1)" },
+    { label:"Orientation", dom: state._axis2dom === "contribution" ? "Contribution ↑" : "Entitlement ↑", color:"var(--axis2)" },
+    { label:"Radius", dom: state._axis3dom === "altrocentric" ? "Altrocentric ↑" : "Selfcentric ↑", color:"var(--axis3)" }
+  ];
+
+  axes.forEach(a => {
+    const cell = document.createElement("div");
+    cell.className = "score-cell";
+    cell.innerHTML = `<div class="score-label">${a.label}</div><div class="score-value" style="color:${a.color}">${a.dom}</div>`;
+    scores.appendChild(cell);
+  });
+
+  card.appendChild(scores);
+
+  const btn = document.createElement("button");
+  btn.className = "continue-btn";
+  btn.textContent = "Close →";
+  btn.onclick = () => advance(node.next);
+  card.appendChild(btn);
+}
+
+function resolveDecision(node) {
+  for (const route of node.routing) {
+    if (route.condition(state)) return route.next;
+  }
+  return node.next;
+}
+
+function advance(nextId) {
+  if (!nextId) return;
+  render(nextId);
+}
+
+function restartSession() {
+  stepCount = 0;
+  initState();
+  document.getElementById("restart-btn").style.display = "none";
+  document.getElementById("progress").style.width = "0%";
+  [1,2,3].forEach(i => {
+    document.getElementById(`pill-${i}`).className = "axis-pill";
+  });
+  render("START");
+}
+
+// ─── BOOT ─────────────────────────────────────────────────────────────────────
+initState();
+render("START");
+</script>
+</body>
+</html>
